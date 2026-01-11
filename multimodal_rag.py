@@ -40,3 +40,62 @@ def create_chunks_by_title(elements):
     )
     print(f"Created {len(chunks)} chunks")
     return chunks
+
+def separate_content_types(chunk):
+    """Analyze what type of chunk it has"""
+    content_data = {
+        "text": chunk.text,
+        "images": [],
+        "tables": [],
+        "types": ['text'],
+    }
+    if hasattr(chunk, 'metadata') and hasattr(chunk.metadata, 'orig_elements'):
+        for element in chunk.metadata.orig_elements:
+            element_type = type(element).__name__
+            if element_type == "Table":
+                content_data["types"].append('table')
+                table_html = getattr(element.metadata, 'text_as_html', element.text)
+                content_data["tables"].append(table_html)
+            elif element_type == "Image":
+                content_data["types"].append('image')
+                if hasattr(element,'metadata') and hasattr(element.metadata, 'image_base64'):
+                    content_data["types"].append('image')
+                    content_data["images"].append(element.metadata.image_base64)
+    content_data['types'] = list(set(content_data['types']))
+    return content_data
+
+def create_ai_enhanced_summary(text, tables, images):
+    """Create an AI-enhanced summary of the text, tables, and images"""
+    try:
+        llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+        prompt_text= f"""You are creating a searchable description for content retrieval.
+
+        CONTENT TO ANALYZE:
+        TEXT CONTENT: {text}
+        """
+        if tables:
+            prompt_text += f"TABLES:\n"
+            for i , table in enumerate(tables):
+                prompt_text += f"TABLE {i+1}:\n{table}\n\n"
+                prompt_text += """
+                YOUR TASK:
+                Generate a comprehensive, searchable description that covers:
+                1. Key facts, numbers and data points from texts and the tables
+                2. Main topics and comcepts discussed
+                3. Questions this content could answers
+                4. Visual content analysis (charts, diagrams, patterns in images)
+                5. Alternative search terms user might use.
+                Make it detailed and searchable- prioritize searchability over brevity.
+
+                SEARCHABLE DESCRIPTION:
+                """
+        message_content = [{"type": "text", "text": prompt_text}]
+        for image_base64 in images:
+            message_content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}
+            })
+        message = HumanMessage(content=message_content)
+        response = llm.invoke([message])
+        return response.content
+    
+    except Exception as e:
+        print(f"AI Summary failed: {e}")
