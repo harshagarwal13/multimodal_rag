@@ -99,3 +99,36 @@ def create_ai_enhanced_summary(text, tables, images):
     
     except Exception as e:
         print(f"AI Summary failed: {e}")
+
+
+def summarise_chunks(chunks):
+    """Process all chunks with AI Summarise"""
+    langchain_documents=[]
+    total_chunks = len(chunks)
+    for i,chunk in enumerate(chunks):
+        current_chunk = i+1
+        content_data = separate_content_types(chunk)
+        if content_data['tables'] or content_data['images']:
+            try:
+                enhanced_content = create_ai_enhanced_summary(content_data["text"], content_data["tables"], content_data["images"])
+            except Exception as e:
+                print(f"Error in Enhancing summary: {e}")
+                enhanced_content = content_data["text"]
+        else:
+            enhanced_content = content_data["text"]
+
+        doc = Document(
+            page_content=enhanced_content,
+            metadata={
+                "original_content": json.dumps({
+                    "raw_text": content_data["text"],
+                    "tables_html": content_data["tables"],
+                    "images_base64": content_data["images"]
+                })
+            }
+        ) 
+
+        langchain_documents.append(doc)
+    print(f"Processed {len(langchain_documents)} chunks")
+    return langchain_documents
+        
